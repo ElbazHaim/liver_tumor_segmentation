@@ -1,0 +1,26 @@
+# python generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+*.ipynb_*
+
+# venv
+.venv
+*.lock
+
+# temp files
+*jukit*
+*ruff*
+
+# data files
+*.csv
+
+# model files
+src/liver_tk/models/*
+
+# scratchpads
+notes.md
+*foo*
