@@ -37,12 +37,8 @@ class SegmentationDataset(Dataset):
         img_path = self.data_root_path / self.data_frame.iloc[idx, 1]
         segment_path = self.data_root_path / self.data_frame.iloc[idx, 2]
 
-        img = torch.tensor(
-            nib.load(img_path).get_fdata(),
-            dtype=torch.float16
-        )
+        img = torch.tensor(nib.load(img_path).get_fdata(), dtype=torch.float16)
         segment = torch.tensor(nib.load(segment_path).get_fdata(), dtype=torch.float16)
-
 
         if self.image_transform:
             img = self.image_transform(img)

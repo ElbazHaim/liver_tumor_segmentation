@@ -42,9 +42,8 @@ class SegmentationDataModule(L.LightningDataModule):
             [
                 transforms.Lambda(lambda x: (x > 0).to(torch.float16)),
                 PadOrTrim(target_depth=target_depth),
-
             ]
-            )
+        )
 
     def setup(self, stage: str = None):
         train_size: int = 0.7
