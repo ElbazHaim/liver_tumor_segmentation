@@ -1,14 +1,12 @@
 import torch
 import torch.nn.functional as F
-import pytorch_lightning as pl
-import mlflow.pytorch
+import lightning as L
 from monai.networks.nets import UNet
 from torchmetrics import MetricCollection, Accuracy
 from torchmetrics.detection.iou import IntersectionOverUnion
-# from mlflow import log_metric
 
-
-class SegmentationModel(pl.LightningModule):
+from icecream import ic
+class SegmentationModel(L.LightningModule):
     def __init__(
         self,
         in_channels=1,
@@ -30,7 +28,7 @@ class SegmentationModel(pl.LightningModule):
             dropout=0.1,
         )
         metrics = MetricCollection(
-            {"IoU": IntersectionOverUnion(num_classes=2), "Accuracy": Accuracy()}
+            {"IoU": IntersectionOverUnion(), "Accuracy": Accuracy(task="binary")}
         )
         self.train_metrics = metrics.clone(prefix="train_")
         self.val_metrics = metrics.clone(prefix="val_")
@@ -41,10 +39,11 @@ class SegmentationModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self(x)
+        ic(y_hat.shape)
+        ic(y.shape)
         loss = F.cross_entropy(y_hat, y)
         self.log("train_loss", loss)
-        preds = torch.argmax(y_hat, dim=1)
-        self.train_metrics(preds, y)
+        self.train_metrics(y_hat, y)
         self.log_dict(self.train_metrics, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 

@@ -1,10 +1,9 @@
-import os
 import pandas as pd
 import numpy as np
 import nibabel as nib
 from pathlib import Path
 import logging
-from typing import Tuple, Union
+from typing import Union, Tuple
 
 
 def pad_or_trim(
@@ -27,7 +26,6 @@ def pad_or_trim(
         start_idx = (current_depth - target_depth) // 2
         image = image[:, :, start_idx : start_idx + target_depth]
         segment = segment[:, :, start_idx : start_idx + target_depth]
-
     elif current_depth < target_depth:
         pad_before = (target_depth - current_depth) // 2
         pad_after = target_depth - current_depth - pad_before
@@ -62,6 +60,75 @@ def window_image(
     return windowed_image
 
 
+def process_image_and_segment(
+    img_path: Path,
+    seg_path: Path,
+    target_depth: int,
+    window_level: float,
+    window_width: float,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Processes the image and segmentation mask by adjusting their depth and applying windowing.
+
+    Args:
+        img_path (Path): Path to the image file.
+        seg_path (Path): Path to the segmentation mask file.
+        target_depth (int): Target depth for the images.
+        window_level (float): Window level for image windowing.
+        window_width (float): Window width for image windowing.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray]: The processed image, processed segmentation, and the affine matrix.
+    """
+    img_nii = nib.load(img_path)
+    seg_nii = nib.load(seg_path)
+
+    image = img_nii.get_fdata()
+    segment = seg_nii.get_fdata()
+
+    affine = img_nii.affine
+
+    windowed_image = window_image(image, window_level, window_width)
+    processed_image, processed_segment = pad_or_trim(
+        windowed_image, segment, target_depth
+    )
+
+    return processed_image, processed_segment, affine
+
+
+def save_processed_files(
+    processed_image: np.ndarray,
+    processed_segment: np.ndarray,
+    affine: np.ndarray,
+    img_path: Path,
+    seg_path: Path,
+    output_image_dir: Path,
+    output_segment_dir: Path,
+) -> None:
+    """
+    Saves the processed image and segmentation mask to the specified directories.
+
+    Args:
+        processed_image (np.ndarray): The processed image array.
+        processed_segment (np.ndarray): The processed segmentation array.
+        affine (np.ndarray): The affine transformation matrix.
+        img_path (Path): Original image file path for naming the output file.
+        seg_path (Path): Original segmentation file path for naming the output file.
+        output_image_dir (Path): Directory to save processed volume files.
+        output_segment_dir (Path): Directory to save processed segment files.
+    """
+    img_filename = img_path.name
+    seg_filename = seg_path.name
+
+    processed_img_path = output_image_dir / img_filename
+    processed_seg_path = output_segment_dir / seg_filename
+
+    nib.save(nib.Nifti1Image(processed_image, affine), processed_img_path)
+    nib.save(nib.Nifti1Image(processed_segment, affine), processed_seg_path)
+
+    logging.info(f"Processed and saved {img_filename} and {seg_filename}")
+
+
 def process_and_save_files(
     csv_file: Union[str, Path],
     output_image_dir: Union[str, Path],
@@ -81,34 +148,28 @@ def process_and_save_files(
         window_level (float): Window level for image windowing.
         window_width (float): Window width for image windowing.
     """
-    Path(output_image_dir).mkdir(parents=True, exist_ok=True)
-    Path(output_segment_dir).mkdir(parents=True, exist_ok=True)
+    output_image_dir = Path(output_image_dir)
+    output_segment_dir = Path(output_segment_dir)
+
+    output_image_dir.mkdir(parents=True, exist_ok=True)
+    output_segment_dir.mkdir(parents=True, exist_ok=True)
 
     df = pd.read_csv(csv_file)
 
     for _, row in df.iterrows():
-        img_path = row["volume_path"]
-        seg_path = row["segment_path"]
+        img_path = Path(row["volume_path"])
+        seg_path = Path(row["segment_path"])
 
-        img_nii = nib.load(img_path)
-        seg_nii = nib.load(seg_path)
+        processed_image, processed_segment, affine = process_image_and_segment(
+            img_path, seg_path, target_depth, window_level, window_width
+        )
 
-        image = img_nii.get_fdata()
-        segment = seg_nii.get_fdata()
-
-        affine = img_nii.affine
-
-        processed_image, processed_segment = pad_or_trim(image, segment, target_depth)
-
-        windowed_image = window_image(processed_image, window_level, window_width)
-
-        img_filename = os.path.basename(img_path)
-        seg_filename = os.path.basename(seg_path)
-
-        processed_img_path = os.path.join(output_image_dir, img_filename)
-        processed_seg_path = os.path.join(output_segment_dir, seg_filename)
-
-        nib.save(nib.Nifti1Image(windowed_image, affine), processed_img_path)
-        nib.save(nib.Nifti1Image(processed_segment, affine), processed_seg_path)
-
-        logging.info(f"Processed and saved {img_filename} and {seg_filename}")
+        save_processed_files(
+            processed_image,
+            processed_segment,
+            affine,
+            img_path,
+            seg_path,
+            output_image_dir,
+            output_segment_dir,
+        )
